@@ -30,3 +30,8 @@ export interface CreateSourceProfile {
   directivity: Spectrum
   operating_factor: number
 }
+
+export interface ProfileTransitionResult {
+  profile: SourceProfile
+  replaced: SourceProfile | null
+}

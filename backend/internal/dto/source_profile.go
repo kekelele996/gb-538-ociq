@@ -19,6 +19,12 @@ type ProfileTransitionRequest struct {
 	LockVersion uint   `json:"lock_version" binding:"required,gte=1"`
 }
 
+// ProfileTransitionResponse 返回迁移后的版本；启用时 replaced 携带被自动退出候选的旧版本。
+type ProfileTransitionResponse struct {
+	Profile  SourceProfileResponse  `json:"profile"`
+	Replaced *SourceProfileResponse `json:"replaced"`
+}
+
 type SourceProfileResponse struct {
 	ID                 uint               `json:"id"`
 	SourceCode         string             `json:"source_code"`

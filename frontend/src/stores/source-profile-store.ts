@@ -12,7 +12,15 @@ export const useSourceProfileStore = defineStore('source-profiles', {
     },
     async create(value: CreateSourceProfile) { const created = await sourceProfileApi.create(value); await this.load(); return created },
     async transition(item: SourceProfile, toState: 'active' | 'retired') {
-      const updated = await sourceProfileApi.transition(item.id, toState, item.lock_version); await this.load(); return updated
+      try {
+        const result = await sourceProfileApi.transition(item.id, toState, item.lock_version)
+        await this.load()
+        return result
+      } catch (error) {
+        // 冲突（409）时刷新列表，让操作失败的一方立即看到最新版本关系。
+        await this.load()
+        throw error
+      }
     },
   },
 })

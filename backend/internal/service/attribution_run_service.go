@@ -71,6 +71,14 @@ func (s *AttributionRunService) Create(ctx context.Context, request dto.CreateAt
 	}
 	sort.Slice(measurements, func(i, j int) bool { return measurements[i].ID < measurements[j].ID })
 	sort.Slice(sources, func(i, j int) bool { return sources[i].ID < sources[j].ID })
+	seenSources := make(map[string]uint, len(sources))
+	for _, source := range sources {
+		if previous, duplicated := seenSources[source.SourceCode]; duplicated {
+			return dto.AttributionRunResponse{}, false, util.Validation(
+				fmt.Sprintf("设备 %s 的 V%d 与 V%d 不能同时进入拟合，同一设备只能保留一个启用版本", source.SourceCode, previous, source.Version), nil)
+		}
+		seenSources[source.SourceCode] = source.Version
+	}
 	measurementInputs, err := buildMeasurementInputs(measurements)
 	if err != nil {
 		return dto.AttributionRunResponse{}, false, err

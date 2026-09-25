@@ -18,6 +18,7 @@ import (
 	"industrial-noise-source-attribution/backend/internal/algorithm"
 	"industrial-noise-source-attribution/backend/internal/constants"
 	"industrial-noise-source-attribution/backend/internal/model"
+	"industrial-noise-source-attribution/backend/internal/repository"
 )
 
 type Config struct {
@@ -73,6 +74,13 @@ func OpenDatabase(config Config) (*gorm.DB, error) {
 		&model.AttributionRun{}, &model.AuditLog{},
 	); err != nil {
 		return nil, fmt.Errorf("migrate database: %w", err)
+	}
+	sourceRepository := repository.NewSourceProfileRepository(db)
+	if err := sourceRepository.RetireDuplicateActives(context.Background()); err != nil {
+		return nil, fmt.Errorf("reconcile active source profiles: %w", err)
+	}
+	if err := sourceRepository.EnsureSingleActiveIndex(context.Background()); err != nil {
+		return nil, err
 	}
 	if err := seedDatabase(db); err != nil {
 		return nil, fmt.Errorf("seed database: %w", err)

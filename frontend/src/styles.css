@@ -98,6 +98,15 @@ code, .hash-text, .request-code { font-family: "SFMono-Regular", Consolas, monos
 .detail-heading h2 { margin: 0; }
 .detail-actions { min-height: 60px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 2px solid var(--ink); }
 .detail-actions > span { margin-right: auto; color: var(--muted); font-size: .68rem; font-weight: 720; }
+.version-chain { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin: 12px 0 4px; padding: 10px 12px; background: var(--wash); border: 1px solid var(--line); border-radius: 5px; }
+.chain-label { color: var(--muted); font-size: .66rem; font-weight: 800; text-transform: uppercase; }
+.chain-arrow { color: var(--line-strong); font-size: .72rem; }
+.chain-node { display: inline-flex; min-height: 44px; align-items: center; gap: 7px; padding: 5px 9px; color: var(--ink); background: var(--paper); border: 1px solid var(--line-strong); border-radius: 4px; cursor: pointer; }
+.chain-node:hover { background: #edf4ef; }
+.chain-node.current { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+.chain-node.candidate { background: var(--green-soft); }
+.chain-node strong { font-size: .74rem; }
+.chain-node em { color: var(--green-dark); font-size: .62rem; font-style: normal; font-weight: 800; }
 .section-heading { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line-strong); }
 .section-heading h2, .section-heading p { margin: 0; }
 .section-heading p { color: var(--muted); font-size: .66rem; }

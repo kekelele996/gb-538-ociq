@@ -14,6 +14,7 @@ import { useSourceProfileStore } from '../stores/source-profile-store'
 import { OCTAVE_BANDS, type Spectrum } from '../types/common'
 import type { CreateSourceProfile, SourceProfile } from '../types/source-profile'
 import { fixed } from '../utils/format'
+import { activeOf, lineageOf } from '../utils/source-lineage'
 
 const store = useSourceProfileStore()
 const points = useMonitoringPointStore()
@@ -27,6 +28,9 @@ const form = reactive<CreateSourceProfile>({
   octave_power: defaultPower(), directivity: defaultDirectivity(), operating_factor: .8,
 })
 const active = computed(() => store.items.filter((item) => item.profile_state === 'active').length)
+const lineage = computed(() => (selected.value ? lineageOf(store.items, selected.value.source_code) : []))
+const currentCandidate = computed(() => activeOf(lineage.value))
+const activateLabel = computed(() => (selected.value?.profile_state === 'retired' ? '切回此版本' : '启用版本'))
 
 onMounted(async () => { await Promise.all([store.load(), points.load()]); selected.value = store.items[0] ?? null })
 function defaultPower(): Spectrum { return Object.fromEntries(OCTAVE_BANDS.map((band, index) => [String(band), 96 - index * 1.7])) }
@@ -40,14 +44,26 @@ async function createProfile() {
 
 async function transition(toState: 'active' | 'retired') {
   if (!selected.value) return
-  try { selected.value = await store.transition(selected.value, toState); ElMessage.success(toState === 'active' ? '声源谱已启用' : '声源谱已废止') }
-  catch (error) { ElMessage.error(errorMessage(error)) }
+  const target = selected.value
+  try {
+    const result = await store.transition(target, toState)
+    selected.value = store.items.find((item) => item.id === result.profile.id) ?? result.profile
+    if (toState === 'active') {
+      ElMessage.success(result.replaced ? `已启用 V${result.profile.version}，V${result.replaced.version} 已自动退出候选` : `声源谱 V${result.profile.version} 已启用`)
+    } else {
+      ElMessage.success(`声源谱 V${result.profile.version} 已废止`)
+    }
+  } catch (error) {
+    ElMessage.error(errorMessage(error))
+    // 冲突后列表已刷新，同步选中项，让操作失败的一方看到最新版本关系。
+    selected.value = store.items.find((item) => item.id === target.id) ?? selected.value
+  }
 }
 </script>
 
 <template>
   <AppShell><div class="page-wrap">
-    <PageHeader eyebrow="SOURCE LIBRARY" title="声源谱" description="维护候选设备位置、参考距离、运行系数与版本化倍频程功率谱。">
+    <PageHeader eyebrow="SOURCE LIBRARY" title="声源谱" description="维护候选设备位置、参考距离、运行系数与版本化倍频程功率谱；同一设备仅一个启用版本进入归因候选。">
       <el-button :icon="RefreshCw" aria-label="刷新声源谱" @click="store.load" /><el-button v-if="canWriteSources" type="primary" :icon="Plus" @click="createOpen = true">新建谱版本</el-button>
     </PageHeader>
     <div class="metric-band"><div><span>谱版本</span><strong>{{ store.items.length }}</strong></div><div><span>启用中</span><strong>{{ active }}</strong></div><div><span>候选设备</span><strong>{{ new Set(store.items.map(x => x.source_code)).size }}</strong></div><div><span>固定频带</span><strong>8</strong></div></div>
@@ -58,9 +74,23 @@ async function transition(toState: 'active' | 'retired') {
       <section class="entity-list"><button v-for="item in store.items" :key="item.id" class="entity-row" :class="{ selected: selected?.id === item.id }" @click="selected = item"><Factory :size="17" /><span><strong>{{ item.source_code }} · V{{ item.version }}</strong><small>{{ item.name }}</small></span><StateBadge :state="item.profile_state" /></button></section>
       <section v-if="selected" class="entity-detail">
         <div class="detail-heading"><div><p class="eyebrow">VERSION {{ selected.version }}</p><h2>{{ selected.name }}</h2></div><StateBadge :state="selected.profile_state" /></div>
+        <div v-if="lineage.length" class="version-chain">
+          <span class="chain-label">版本关系</span>
+          <template v-for="(item, index) in lineage" :key="item.id">
+            <span v-if="index" class="chain-arrow" aria-hidden="true">→</span>
+            <button class="chain-node" :class="{ current: item.id === selected.id, candidate: item.profile_state === 'active' }" :aria-label="`查看版本 V${item.version}`" @click="selected = item">
+              <strong>V{{ item.version }}</strong><StateBadge :state="item.profile_state" /><em v-if="item.profile_state === 'active'">当前候选</em>
+            </button>
+          </template>
+        </div>
         <dl class="evidence-grid point-grid"><div><dt>位置</dt><dd>{{ selected.x_m }}, {{ selected.y_m }}, {{ selected.height_m }} m</dd></div><div><dt>参考距离</dt><dd>{{ selected.reference_distance_m }} m</dd></div><div><dt>运行系数</dt><dd>{{ fixed(selected.operating_factor * 100, 0) }}%</dd></div><div><dt>并发版本</dt><dd>{{ selected.lock_version }}</dd></div></dl>
         <OctaveBandChart :series="[{ name: '声功率谱', values: selected.octave_power, color: '#2c6b4d' }, { name: '方向性修正', values: selected.directivity, color: '#b0781c' }]" />
-        <div class="detail-actions"><el-button @click="evidenceOpen = true">查看冻结字段</el-button><el-button v-if="canWriteSources && selected.profile_state === 'draft'" type="primary" @click="transition('active')">启用版本</el-button><el-button v-if="canWriteSources && selected.profile_state === 'active'" type="danger" plain @click="transition('retired')">废止版本</el-button></div>
+        <div class="detail-actions">
+          <span v-if="canWriteSources && selected.profile_state !== 'active' && currentCandidate">启用后 V{{ currentCandidate.version }} 将自动退出候选</span>
+          <el-button @click="evidenceOpen = true">查看冻结字段</el-button>
+          <el-button v-if="canWriteSources && (selected.profile_state === 'draft' || selected.profile_state === 'retired')" type="primary" @click="transition('active')">{{ activateLabel }}</el-button>
+          <el-button v-if="canWriteSources && selected.profile_state === 'active'" type="danger" plain @click="transition('retired')">废止版本</el-button>
+        </div>
       </section>
     </div>
   </div></AppShell>
