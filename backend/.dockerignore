@@ -1,0 +1,6 @@
+.git
+*.db
+*.log
+bin/
+coverage/
+Dockerfile*
