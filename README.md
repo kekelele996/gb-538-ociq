@@ -14,7 +14,7 @@ NoiseTrace 面向职业卫生工程师、厂区声学分析员和独立复核人
 
 - 监测点：维护三维坐标、受声区、责任团队和完整 63-8000 Hz 背景谱。
 - 测量工作台：导入八个固定倍频程、生成 SHA-256 checksum、执行质量判定和受控状态迁移。
-- 声源谱：维护设备位置、参考距离、方向性、运行系数和不可变频谱版本。
+- 声源谱：维护设备位置、参考距离、方向性、运行系数和不可变频谱版本；同一设备同一时刻只有一个启用版本，启用新版自动顶替旧版，旧版可切回。
 - 贡献归因：冻结测量、声源版本、算法版本和输入快照，输出逐频带贡献、总贡献、残差及不可辨识提示。
 - 独立复核：运行发起人不能确认自己的结果；复核与确认使用条件更新，历史结果不可覆盖。
 - 审计中心：每次业务写入在同一数据库事务中保存操作者、request ID、before/after 和算法元数据。
@@ -37,7 +37,7 @@ NoiseTrace 面向职业卫生工程师、厂区声学分析员和独立复核人
 | --- | --- | --- |
 | `/points` | MonitoringPoint + NoiseMeasurement | 建点、背景谱、最近测量质量、停用 |
 | `/measurements` | NoiseMeasurement + MonitoringPoint | 导入频谱、checksum、背景扣除和状态推进 |
-| `/sources` | SourceProfile + MonitoringPoint | 新建版本、位置/参考距离、启用和废止 |
+| `/sources` | SourceProfile + MonitoringPoint | 新建版本、位置/参考距离、版本关系链、启用顶替、切回旧版和废止 |
 | `/attribution` | AttributionRun + NoiseMeasurement + SourceProfile | 冻结输入、运行拟合、查看证据、复核和确认 |
 | `/audit` | 四实体审计投影 | 按实体、request ID、操作者筛选前后快照 |
 
@@ -90,7 +90,7 @@ output/
 | `POST /api/v1/noise-measurements/:id/transition` | 测量状态迁移 |
 | `GET/POST /api/v1/source-profiles` | 声源谱列表与新版本 |
 | `GET /api/v1/source-profiles/:id` | 声源谱详情 |
-| `POST /api/v1/source-profiles/:id/transition` | 启用或废止谱版本 |
+| `POST /api/v1/source-profiles/:id/transition` | 启用（自动顶替当前启用版）、切回或废止谱版本 |
 | `GET/POST /api/v1/attribution-runs` | 归因历史和幂等运行 |
 | `GET /api/v1/attribution-runs/:id` | 冻结输入与完整证据 |
 | `GET /api/v1/attribution-runs/:id/compare/:other_id` | 历史结果差异 |
@@ -141,10 +141,16 @@ NoiseMeasurement:
 captured -> validated -> normalized -> ready -> superseded
        \-> rejected      \-> rejected
 
+SourceProfile:
+draft -> active -> retired
+           ^_________|  (切回旧版)
+
 AttributionRun:
 queued -> calculating -> completed -> reviewed -> confirmed
                     \-> failed      \-> voided
 ```
+
+同一 `source_code` 下任何时刻至多一个 `active` 版本。启用草稿或切回旧版时，请求携带 `expected_active_id`（认为当前启用的版本 ID，`null` 表示没有）；服务端在同一事务中条件更新目标版本、令当前启用版本退出候选并写入两条审计（`source_profile.activated` 与 `source_profile.superseded`，共享 request ID，记录谁替代了谁）。声明与实际不一致、或 lock_version 过期时返回 409，两个版本都不会留下半套状态。PostgreSQL 下事务先锁定整个版本组，前后脚的并发启用只有一个能成功。
 
 状态更新使用 `id + current_state + version` 条件更新，避免并发先读后写覆盖。业务实体与审计记录在同一事务提交；审计写入失败会回滚业务写入。
 

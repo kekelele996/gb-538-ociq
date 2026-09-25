@@ -98,6 +98,13 @@ code, .hash-text, .request-code { font-family: "SFMono-Regular", Consolas, monos
 .detail-heading h2 { margin: 0; }
 .detail-actions { min-height: 60px; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 2px solid var(--ink); }
 .detail-actions > span { margin-right: auto; color: var(--muted); font-size: .68rem; font-weight: 720; }
+.version-chain { margin-top: 14px; padding: 10px 12px; background: #f0f4f1; border-left: 3px solid var(--green); }
+.version-chain-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.version-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; color: var(--ink); background: var(--paper); border: 1px solid var(--line-strong); border-radius: 3px; font-size: .66rem; cursor: pointer; }
+.version-chip:hover { background: #edf4ef; }
+.version-chip.current { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+.chain-arrow { color: var(--muted); font-size: .66rem; }
+.chain-note { margin: 8px 0 0; color: var(--muted); font-size: .64rem; }
 .section-heading { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line-strong); }
 .section-heading h2, .section-heading p { margin: 0; }
 .section-heading p { color: var(--muted); font-size: .66rem; }

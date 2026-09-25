@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Factory, Plus, RefreshCw } from '@lucide/vue'
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import AppShell from '../components/common/AppShell.vue'
 import AttributionDetailDrawer from '../components/common/AttributionDetailDrawer.vue'
 import OctaveBandChart from '../components/common/OctaveBandChart.vue'
@@ -13,6 +13,7 @@ import { useMonitoringPointStore } from '../stores/monitoring-point-store'
 import { useSourceProfileStore } from '../stores/source-profile-store'
 import { OCTAVE_BANDS, type Spectrum } from '../types/common'
 import type { CreateSourceProfile, SourceProfile } from '../types/source-profile'
+import { currentActive, siblingVersions, supersededBy } from '../utils/source-versions'
 import { fixed } from '../utils/format'
 
 const store = useSourceProfileStore()
@@ -27,6 +28,9 @@ const form = reactive<CreateSourceProfile>({
   octave_power: defaultPower(), directivity: defaultDirectivity(), operating_factor: .8,
 })
 const active = computed(() => store.items.filter((item) => item.profile_state === 'active').length)
+const siblings = computed(() => selected.value ? siblingVersions(store.items, selected.value.source_code) : [])
+const activeSibling = computed(() => selected.value ? currentActive(store.items, selected.value.source_code, selected.value.id) : null)
+const replacedBy = computed(() => selected.value ? supersededBy(store.items, selected.value) : null)
 
 onMounted(async () => { await Promise.all([store.load(), points.load()]); selected.value = store.items[0] ?? null })
 function defaultPower(): Spectrum { return Object.fromEntries(OCTAVE_BANDS.map((band, index) => [String(band), 96 - index * 1.7])) }
@@ -39,15 +43,30 @@ async function createProfile() {
 }
 
 async function transition(toState: 'active' | 'retired') {
-  if (!selected.value) return
-  try { selected.value = await store.transition(selected.value, toState); ElMessage.success(toState === 'active' ? '声源谱已启用' : '声源谱已废止') }
-  catch (error) { ElMessage.error(errorMessage(error)) }
+  const target = selected.value
+  if (!target) return
+  const replaced = toState === 'active' ? activeSibling.value : null
+  if (replaced) {
+    try {
+      await ElMessageBox.confirm(
+        `启用 ${target.source_code} V${target.version} 后，当前启用的 V${replaced.version} 将自动退出候选，归因拟合中同一设备只保留一个启用版本。`,
+        '确认替换启用版本',
+        { confirmButtonText: '启用并替换', cancelButtonText: '取消', type: 'warning' },
+      )
+    } catch { return }
+  }
+  try {
+    selected.value = await store.transition(target, toState)
+    ElMessage.success(toState === 'active'
+      ? (replaced ? `已启用 V${target.version}，V${replaced.version} 已自动退出候选` : `声源谱 V${target.version} 已启用`)
+      : '声源谱已废止')
+  } catch (error) { ElMessage.error(errorMessage(error)) }
 }
 </script>
 
 <template>
   <AppShell><div class="page-wrap">
-    <PageHeader eyebrow="SOURCE LIBRARY" title="声源谱" description="维护候选设备位置、参考距离、运行系数与版本化倍频程功率谱。">
+    <PageHeader eyebrow="SOURCE LIBRARY" title="声源谱" description="维护候选设备位置、参考距离、运行系数与版本化倍频程功率谱；同一设备同一时刻只有一个启用版本。">
       <el-button :icon="RefreshCw" aria-label="刷新声源谱" @click="store.load" /><el-button v-if="canWriteSources" type="primary" :icon="Plus" @click="createOpen = true">新建谱版本</el-button>
     </PageHeader>
     <div class="metric-band"><div><span>谱版本</span><strong>{{ store.items.length }}</strong></div><div><span>启用中</span><strong>{{ active }}</strong></div><div><span>候选设备</span><strong>{{ new Set(store.items.map(x => x.source_code)).size }}</strong></div><div><span>固定频带</span><strong>8</strong></div></div>
@@ -59,8 +78,22 @@ async function transition(toState: 'active' | 'retired') {
       <section v-if="selected" class="entity-detail">
         <div class="detail-heading"><div><p class="eyebrow">VERSION {{ selected.version }}</p><h2>{{ selected.name }}</h2></div><StateBadge :state="selected.profile_state" /></div>
         <dl class="evidence-grid point-grid"><div><dt>位置</dt><dd>{{ selected.x_m }}, {{ selected.y_m }}, {{ selected.height_m }} m</dd></div><div><dt>参考距离</dt><dd>{{ selected.reference_distance_m }} m</dd></div><div><dt>运行系数</dt><dd>{{ fixed(selected.operating_factor * 100, 0) }}%</dd></div><div><dt>并发版本</dt><dd>{{ selected.lock_version }}</dd></div></dl>
+        <div class="version-chain">
+          <p class="eyebrow">版本关系 · {{ selected.source_code }}</p>
+          <div class="version-chain-row">
+            <template v-for="(item, index) in siblings" :key="item.id">
+              <span v-if="index" class="chain-arrow" aria-hidden="true">→</span>
+              <button class="version-chip" :class="{ current: item.id === selected?.id }" @click="selected = item">
+                <strong>V{{ item.version }}</strong><StateBadge :state="item.profile_state" />
+              </button>
+            </template>
+          </div>
+          <p v-if="replacedBy" class="chain-note">本版本已被 V{{ replacedBy.version }} 替代；切回本版本后 V{{ replacedBy.version }} 将自动退出候选。</p>
+          <p v-else-if="activeSibling" class="chain-note">当前启用：V{{ activeSibling.version }}；启用本版本后它将自动退出候选。</p>
+          <p v-else class="chain-note">该设备当前没有其他启用版本。</p>
+        </div>
         <OctaveBandChart :series="[{ name: '声功率谱', values: selected.octave_power, color: '#2c6b4d' }, { name: '方向性修正', values: selected.directivity, color: '#b0781c' }]" />
-        <div class="detail-actions"><el-button @click="evidenceOpen = true">查看冻结字段</el-button><el-button v-if="canWriteSources && selected.profile_state === 'draft'" type="primary" @click="transition('active')">启用版本</el-button><el-button v-if="canWriteSources && selected.profile_state === 'active'" type="danger" plain @click="transition('retired')">废止版本</el-button></div>
+        <div class="detail-actions"><el-button @click="evidenceOpen = true">查看冻结字段</el-button><el-button v-if="canWriteSources && selected.profile_state === 'draft'" type="primary" @click="transition('active')">启用版本</el-button><el-button v-if="canWriteSources && selected.profile_state === 'retired'" type="primary" plain @click="transition('active')">切回此版本</el-button><el-button v-if="canWriteSources && selected.profile_state === 'active'" type="danger" plain @click="transition('retired')">废止版本</el-button></div>
       </section>
     </div>
   </div></AppShell>

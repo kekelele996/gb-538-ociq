@@ -38,8 +38,9 @@ const (
 )
 
 var ProfileTransitions = map[ProfileState]map[ProfileState]bool{
-	ProfileDraft:  {ProfileActive: true},
-	ProfileActive: {ProfileRetired: true},
+	ProfileDraft:   {ProfileActive: true},
+	ProfileActive:  {ProfileRetired: true},
+	ProfileRetired: {ProfileActive: true},
 }
 
 func CanTransitionProfile(from, to ProfileState) bool {

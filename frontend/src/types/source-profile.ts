@@ -14,6 +14,7 @@ export interface SourceProfile {
   profile_state: 'draft' | 'active' | 'retired'
   version: number
   lock_version: number
+  superseded_by_id: number | null
   created_by: number
   created_at: string
   updated_at: string

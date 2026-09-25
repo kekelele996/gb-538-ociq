@@ -16,6 +16,7 @@ type SourceProfile struct {
 	ProfileState       string    `gorm:"size:24;index;not null"`
 	Version            uint      `gorm:"not null;uniqueIndex:idx_source_version"`
 	LockVersion        uint      `gorm:"not null;default:1"`
+	SupersededByID     *uint     `gorm:"index"`
 	CreatedBy          uint      `gorm:"index;not null"`
 	CreatedAt          time.Time `gorm:"not null"`
 	UpdatedAt          time.Time `gorm:"not null"`

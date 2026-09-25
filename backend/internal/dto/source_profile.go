@@ -17,6 +17,9 @@ type CreateSourceProfileRequest struct {
 type ProfileTransitionRequest struct {
 	ToState     string `json:"to_state" binding:"required"`
 	LockVersion uint   `json:"lock_version" binding:"required,gte=1"`
+	// ExpectedActiveID 是客户端认为的当前启用版本 ID；null 表示认为当前没有启用版本。
+	// 仅 to_state=active 时参与校验，不一致返回 409，避免两人前后脚操作互相覆盖。
+	ExpectedActiveID *uint `json:"expected_active_id"`
 }
 
 type SourceProfileResponse struct {
@@ -33,6 +36,7 @@ type SourceProfileResponse struct {
 	ProfileState       string             `json:"profile_state"`
 	Version            uint               `json:"version"`
 	LockVersion        uint               `json:"lock_version"`
+	SupersededByID     *uint              `json:"superseded_by_id"`
 	CreatedBy          uint               `json:"created_by"`
 	CreatedAt          time.Time          `json:"created_at"`
 	UpdatedAt          time.Time          `json:"updated_at"`

@@ -25,3 +25,18 @@ func TestAttributionStateMachine(t *testing.T) {
 		t.Fatal("confirmed result must remain immutable")
 	}
 }
+
+func TestProfileStateMachine(t *testing.T) {
+	if !CanTransitionProfile(ProfileDraft, ProfileActive) {
+		t.Fatal("draft -> active must be legal")
+	}
+	if !CanTransitionProfile(ProfileActive, ProfileRetired) {
+		t.Fatal("active -> retired must be legal")
+	}
+	if !CanTransitionProfile(ProfileRetired, ProfileActive) {
+		t.Fatal("retired -> active must allow switching an old version back")
+	}
+	if CanTransitionProfile(ProfileDraft, ProfileRetired) {
+		t.Fatal("draft -> retired must be rejected")
+	}
+}
